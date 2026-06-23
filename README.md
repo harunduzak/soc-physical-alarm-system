@@ -1,4 +1,4 @@
-# 🛡️ IoT-Based Physical Cyber Security Alarm and Incident Response System
+# IoT-Based Physical Cyber Security Alarm and Incident Response System
 
 SOC analysts deal with hundreds of alerts every day. Most of them get ignored — not because they're unimportant, but because staring at a screen all day kills focus. This project takes a different approach: instead of yet another dashboard notification, it makes the alarm physical and impossible to ignore. The station announces the attacker's IP and location out loud, keeps beeping, and only shuts up when you physically walk up and press the button.
 
