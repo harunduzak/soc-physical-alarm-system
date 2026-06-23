@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saldırı Log Oluşturucu</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        .container { max-width: 900px; margin: auto; }
+        h2 { text-align: center; color: #4a90e2; }
+        .dashboard { background: #1e1e1e; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .controls { display: flex; justify-content: space-between; gap: 10px; margin-top: 20px; }
+        select, button {
+            padding: 10px;
+            border-radius: 5px;
+            border: none;
+            font-size: 16px;
+            background: #2a2a2a;
+            color: white;
+            width: 100%;
+        }
+        button { background: #4a90e2; cursor: pointer; font-weight: bold; }
+        button:hover { background: #357abd; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #333; }
+        th { color: #888; }
+        .sev-Low { color: #4CAF50; }
+        .sev-Medium { color: #FFC107; }
+        .sev-High { color: #FF9800; }
+        .sev-Critical { color: #F44336; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Saldırı Log Oluşturucu ve Görselleştirici</h2>
+    
+    <div class="dashboard">
+        <canvas id="attackChart" height="100"></canvas>
+    </div>
+
+    <div class="controls">
+        <select id="attackType">
+            <option value="Brute Force">Brute Force</option>
+            <option value="SQL Injection">SQL Injection</option>
+            <option value="DDoS">DDoS</option>
+            <option value="XSS">XSS</option>
+            <option value="Malware">Malware Activity</option>
+        </select>
+        
+        <select id="severity">
+            <option value="Low">Low (Düşük)</option>
+            <option value="Medium">Medium (Orta)</option>
+            <option value="High">High (Yüksek)</option>
+            <option value="Critical">Critical (Kritik)</option>
+        </select>
+        
+        <button onclick="saldiriBaslat()">Saldırı Logu Oluştur / Gönder</button>
+    </div>
+
+    <div class="dashboard">
+        <table>
+            <thead>
+                <tr>
+                    <th>Zaman</th>
+                    <th>Kaynak IP</th>
+                    <th>Tür</th>
+                    <th>Önem</th>
+                </tr>
+            </thead>
+            <tbody id="logTableBody">
+                </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // === DİKKAT: BURAYA KENDİ N8N WEBHOOK ADRESİNİ YAZ ===
+    const N8N_WEBHOOK_URL ="http://192.168.1.128:5678/webhook-test/attack-log";
+
+    // Grafik Ayarları
+    const ctx = document.getElementById('attackChart').getContext('2d');
+    const attackCounts = { 'Brute Force': 0, 'SQL Injection': 0, 'DDoS': 0, 'XSS': 0, 'Malware': 0 };
+    
+    const chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(attackCounts),
+            datasets: [{
+                label: 'Saldırı Sayısı',
+                data: Object.values(attackCounts),
+                backgroundColor: '#4a90e2'
+            }]
+        },
+        options: {
+            indexAxis: 'y', // Yatay bar grafik
+            scales: { x: { beginAtZero: true, ticks: { color: '#888' } }, y: { ticks: { color: '#888' } } },
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    // Rastgele IP Üretici
+    function rastgeleIP() {
+        return Math.floor(Math.random() * 255) + 1 + "." + 
+               Math.floor(Math.random() * 255) + "." + 
+               Math.floor(Math.random() * 255) + "." + 
+               Math.floor(Math.random() * 255);
+    }
+
+    // Butona Basıldığında Çalışacak Fonksiyon
+    async function saldiriBaslat() {
+        const type = document.getElementById('attackType').value;
+        const severity = document.getElementById('severity').value;
+        const sourceIp = rastgeleIP();
+        const time = new Date().toLocaleTimeString('tr-TR');
+
+        // 1. Grafiği Güncelle
+        attackCounts[type]++;
+        chart.data.datasets[0].data = Object.values(attackCounts);
+        chart.update();
+
+        // 2. Tabloya Ekle
+        const tbody = document.getElementById('logTableBody');
+        const row = `<tr class="sev-${severity}">
+            <td>${time}</td>
+            <td>${sourceIp}</td>
+            <td>${type}</td>
+            <td>${severity}</td>
+        </tr>`;
+        tbody.innerHTML = row + tbody.innerHTML; // En üste ekler
+
+        // 3. N8N'e Webhook Gönder
+        const payload = { ip: sourceIp, type: type, severity: severity };
+        
+        try {
+            await fetch(N8N_WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            console.log("n8n'e başarıyla iletildi: ", payload);
+        } catch (error) {
+            console.error("n8n'e gönderirken hata oluştu! URL'yi kontrol et.", error);
+            alert("n8n'e ulaşılamadı. Kodun içindeki N8N_WEBHOOK_URL kısmını kendi IP'nize göre düzelttiniz mi?");
+        }
+    }
+</script>
+
+</body>
+</html>

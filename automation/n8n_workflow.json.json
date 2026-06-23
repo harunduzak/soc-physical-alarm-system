@@ -1,0 +1,494 @@
+{
+  "name": "Saldiri V4",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "let responseData = $input.item.json.output;\n\n// 1. İHTİMAL: Yapay zeka bize zaten tertemiz bir Obje (JSON) gönderdiyse\nif (typeof responseData === 'object') {\n    return responseData;\n}\n\n// 2. İHTİMAL: Yapay zeka bize metin gönderdiyse (gevezelik yapsa bile)\nif (typeof responseData === 'string') {\n    try {\n        // SİHİRLİ KISIM: Metnin içindeki süslü parantezleri { ... } cımbızla çeker.\n        // Yapay zeka başına \"According to\" veya sonuna \"İşte sonuçlar\" yazsa bile onları yoksayar.\n        let jsonMatch = responseData.match(/\\{[\\s\\S]*\\}/);\n        \n        if (jsonMatch) {\n            return JSON.parse(jsonMatch[0]);\n        } else {\n            // Süslü parantez bulamazsa standart çevirmeyi dener\n            return JSON.parse(responseData);\n        }\n    } catch (error) {\n        // ÇÖKMEYİ ENGELLE: Herhangi bir hata olursa sistemi durdurma, sahte veriyle devam et.\n        return { \n            ipAddress: \"Ceviri Hatasi\", \n            countryCode: \"Bilinmiyor\", \n            abuseConfidenceScore: 0 \n        };\n    }\n}\n\n// Ne olur ne olmaz, sistem çökmesin diye varsayılan bir çıkış\nreturn { ipAddress: \"Bulunamadı\", countryCode: \"Bilinmiyor\", abuseConfidenceScore: 0 };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        112
+      ],
+      "name": "JSON Çevirici (Code)",
+      "id": "795fad23-8884-4e09-b5f9-c90bbd4202fb"
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        384,
+        112
+      ],
+      "name": "Butona Basılmasını Bekle",
+      "id": "e053e7b8-c000-46fc-afab-206b3712a718",
+      "webhookId": "b7fbdf2f-d80c-4629-8899-7dc7b128a4a9"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "attack-log",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -1264,
+        112
+      ],
+      "name": "Webhook",
+      "id": "e62354e7-c680-4ed0-a527-64c2c0f6f85b",
+      "webhookId": "97b2ad10-2c46-40c7-9346-25d6e4bb6747"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://SUNUCU_IP/saldiri-tetikleme",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "ip",
+              "value": "={{ $json.ipAddress }}"
+            },
+            {
+              "name": "country",
+              "value": "={{ $json.countryCode }}"
+            },
+            {
+              "name": "score",
+              "value": "={{ $json.abuseConfidenceScore }}"
+            },
+            {
+              "name": "executionId",
+              "value": "=={{ $resumeWebhookUrl }}"
+            },
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -432,
+        112
+      ],
+      "name": "Deneyap",
+      "id": "1184f861-222d-44ad-9d73-777c3f41b818"
+    },
+    {
+      "parameters": {
+        "fromEmail": "harunduzak16@gmail.com",
+        "toEmail": "harunduzak16@gmail.com",
+        "subject": "🛡️ SALDIRI ENGELLENDİ!",
+        "text": "=🚨 GÜVENLİK İHLALİ VE MÜDAHALE RAPORU 🚨\n\nSaldırgan IP: {{ $('JSON Çevirici (Code)').item.json.ipAddress }}\nKonum: {{ $('JSON Çevirici (Code)').item.json.countryCode }}\nRisk Durumu / Puanı: {{ $('JSON Çevirici (Code)').item.json.abuseConfidenceScore }} / 100\n\n🛡️ MÜDAHALE DETAYLARI 🛡️\nDurum: Fiziksel buton kullanılarak MANUEL ENGELLENDİ 🛑\nEngellenme Zamanı: {{ $now.setZone('Europe/Istanbul').toFormat('dd.MM.yyyy HH:mm:ss') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "name": "mail gönder",
+      "id": "2a5c11ff-ad4f-475c-a38c-768d1d01089b",
+      "webhookId": "012e6f22-c26a-4fd4-9b06-b90fff6751ed",
+      "credentials": {
+        "smtp": {
+          "id": "2jCajiLD8msQG56J",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Güncel tarih ve saati Türkiye saatine göre al\nlet tarih = new Date().toLocaleString(\"tr-TR\", { timeZone: \"Europe/Istanbul\" });\n\n// 2. Önceki JSON Çevirici düğümündeki verileri güvenle çek\nlet veri = $('JSON Çevirici (Code)').first().json;\nlet ip = veri.ipAddress || \"Bilinmiyor\";\nlet konum = veri.countryCode || \"Bilinmiyor\";\nlet risk = veri.abuseConfidenceScore || 0;\n\n// 3. Log metnini oluştur (Sondaki \\r\\n kodu alt satıra geçmesini sağlar)\nlet logMetni = `[${tarih}] 🛑 MANUEL ENGELLENDİ | IP: ${ip} | Konum: ${konum} | Risk: ${risk}/100\\r\\n`;\n\n// 4. SİHİRLİ KISIM: Metni n8n'in istediği o \"Binary\" (Dosya) formatına çevir\n$input.item.binary = {\n    data: {\n        data: Buffer.from(logMetni).toString('base64'),\n        mimeType: 'text/plain',\n        fileName: 'log.txt'\n    }\n};\n\nreturn $input.item;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        224
+      ],
+      "id": "963aba83-1088-45b2-9da8-0cf5dfa3e2d2",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1naipQS8SejQV1x69SDjp6GPiKH3g_mK9fvMduf4y3PY",
+          "mode": "list",
+          "cachedResultName": "SOC_Saldiri_Loglari",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1naipQS8SejQV1x69SDjp6GPiKH3g_mK9fvMduf4y3PY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 111071131,
+          "mode": "list",
+          "cachedResultName": "SOC_Saldiri_Loglari",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1naipQS8SejQV1x69SDjp6GPiKH3g_mK9fvMduf4y3PY/edit#gid=111071131"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Zaman": "={{ $now.setZone('Europe/Istanbul').toFormat('dd.MM.yyyy HH:mm:ss') }}",
+            "Saldırgan IP": "={{ $('JSON Çevirici (Code)').item.json.ipAddress }}",
+            "Konum": "={{ $('JSON Çevirici (Code)').item.json.countryCode }}",
+            "Risk Puanı": "={{ $('JSON Çevirici (Code)').item.json.abuseConfidenceScore }}",
+            "Durum": "Manuel Engellendi"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Zaman",
+              "displayName": "Zaman",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Saldırgan IP",
+              "displayName": "Saldırgan IP",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Konum",
+              "displayName": "Konum",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Risk Puanı",
+              "displayName": "Risk Puanı",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Durum",
+              "displayName": "Durum",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        848,
+        272
+      ],
+      "id": "ca029ae5-63a4-4c0c-aacb-ec1048947d96",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "JF1S7ouQ4CjlTEso",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.abuseipdb.com/api/v2/check",
+        "sendQuery": true,
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "maxAgeInDays",
+              "valueProvider": "fieldValue",
+              "value": "90"
+            },
+            {
+              "name": "ipAddress",
+              "valueProvider": "fieldValue",
+              "value": "{ip_adresi}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "Key",
+              "valueProvider": "fieldValue",
+              "value": "6a41549bcd47f3e5e9521bdd9e6d276704404e96bb4a6e52b3583a0e9aa14671824716d87122cc79"
+            },
+            {
+              "name": "Accept",
+              "valueProvider": "fieldValue",
+              "value": "application/json"
+            }
+          ]
+        },
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "ip_adresi",
+              "description": "Sorgulanacak olan şüpheli IP adresi.",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1,
+      "position": [
+        -960,
+        320
+      ],
+      "name": "AbuseIPDB_Tool",
+      "id": "de35073a-9bff-4b93-9767-e4ea523d6de0"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -1104,
+        320
+      ],
+      "name": "Groq Chat Model",
+      "id": "d39193f4-2cea-4f98-8558-4242086eebb5",
+      "credentials": {
+        "groqApi": {
+          "id": "lVAnph3a2vPYaKsC",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "text": "=GÖREVİN: Sana gelen girdideki IP adresini al ve 'AbuseIPDB_Tool' aracını kullanarak sorgula.\n\nSorgulayacağın IP adresi: {{ $json.body.ip }}\n\nAracı çalıştırırken 'ip_adresi' parametresine kesinlikle bu IP değerini ata. Araçtan dönen ham yanıttaki 'abuseConfidenceScore' (Risk Puanı) ve 'countryName' değerlerini oku.\n\nSonuçları jürinin ve sistemin işleyebilmesi için tam olarak şu JSON formatında geri döndür, başına sonuna asla metin ekleme:\n\n{\n\"ipAddress\": \"{{ $json.body.ip }}\",\n\"countryCode\": \"Bulduğun Tam Ülke İsmi\",\n\"abuseConfidenceScore\": Bulduğun Gerçek Puan\n}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1,
+      "position": [
+        -1024,
+        112
+      ],
+      "name": "AI Agent",
+      "id": "a9ef543e-65a0-47f6-a5c4-04caf20c8bf1"
+    },
+    {
+      "parameters": {
+        "url": "https://translate.google.com/translate_tts",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "ie",
+              "value": "UTF-8"
+            },
+            {
+              "name": "tl",
+              "value": "tr"
+            },
+            {
+              "name": "client",
+              "value": "tw-ob"
+            },
+            {
+              "name": "q",
+              "value": "=Dikkat! {{ $('JSON Çevirici (Code)').item.json.countryCode }} konumundan bir siber müdahale algılandı. Saldırgan IP adresi {{ $('JSON Çevirici (Code)').item.json.ipAddress }}. Tehdit risk skoru yüz üzerinden {{ $('JSON Çevirici (Code)').item.json.abuseConfidenceScore }}."
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -176,
+        112
+      ],
+      "id": "9e42894d-0da8-41c4-8ffd-c97dbb79a6cd",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://SUNUCU_IP/saldiri-sesi",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        80,
+        112
+      ],
+      "id": "460ad73c-3018-4ede-82cd-b08fa05ae9f5",
+      "name": "HTTP Request1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "JSON Çevirici (Code)": {
+      "main": [
+        [
+          {
+            "node": "Deneyap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Butona Basılmasını Bekle": {
+      "main": [
+        [
+          {
+            "node": "mail gönder",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deneyap": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AbuseIPDB_Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "JSON Çevirici (Code)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Butona Basılmasını Bekle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "3a6e2f37-5c2d-495d-8b53-92d7f6f68ea4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6497cfbec477833f6149cc173d2cd1dd49fca4749867defe833ba3fb1eafc529"
+  },
+  "nodeGroups": [],
+  "id": "tLsBxLyETjtWPcla",
+  "tags": []
+}
